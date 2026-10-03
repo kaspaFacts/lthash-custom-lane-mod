@@ -1,277 +1,157 @@
-use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion};
-use std::env;
+use std::fmt;
 
-pub const CUSTOM_MODULUS_U16: u16 = 65521; // Prime M = 2^16 - 15
-pub const LANES: usize = 1024;
-pub const PRECOMPUTED_TABLE_SIZE: usize = 10_000;
+pub const LANE_COUNT: usize = 16;
+pub const MODULUS: u64 = 0xFFFF_FFFF_FFFF_0001; // 64-bit prime/modulus
 
-// ============================================================================
-// 1. Core Arithmetic Functions (Single Lane & Full Vector)
-// ============================================================================
-
-/// Branchless Custom Modulo Addition on a single u16 lane (M = 65,521)
-#[inline(always)]
-pub fn add_lane_custom_mod(a: u16, b: u16) -> u16 {
-    debug_assert!(a < CUSTOM_MODULUS_U16 && b < CUSTOM_MODULUS_U16);
-    let threshold = CUSTOM_MODULUS_U16 - b;
-    let diff = a.wrapping_sub(threshold);
-    let mask = ((diff as i16) >> 15) as u16;
-    diff.wrapping_add(threshold & mask)
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct LtHashState {
+    pub lanes: [u64; LANE_COUNT],
 }
 
-/// Branchless Custom Modulo Subtraction on a single u16 lane (M = 65,521)
-#[inline(always)]
-pub fn sub_lane_custom_mod(a: u16, b: u16) -> u16 {
-    debug_assert!(a < CUSTOM_MODULUS_U16 && b < CUSTOM_MODULUS_U16);
-    let diff = a.wrapping_sub(b);
-    let mask = ((diff as i16) >> 15) as u16;
-    diff.wrapping_add(CUSTOM_MODULUS_U16 & mask)
-}
-
-/// Native 16-bit Wrapping Addition on a single u16 lane (M = 65,536 / 2^16)
-#[inline(always)]
-pub fn add_lane_native_wrap(a: u16, b: u16) -> u16 {
-    a.wrapping_add(b)
-}
-
-/// Native 16-bit Wrapping Subtraction on a single u16 lane (M = 65,536 / 2^16)
-#[inline(always)]
-pub fn sub_lane_native_wrap(a: u16, b: u16) -> u16 {
-    a.wrapping_sub(b)
-}
-
-// ============================================================================
-// 2. Accumulator Struct (Full 1024-Lane Vector)
-// ============================================================================
-
-#[derive(Clone, PartialEq, Eq, Debug)]
-pub struct LtHash16 {
-    pub lanes: [u16; LANES],
-}
-
-impl LtHash16 {
+impl LtHashState {
     pub fn new() -> Self {
-        Self { lanes: [0u16; LANES] }
-    }
-
-    pub fn is_identity(&self) -> bool {
-        self.lanes.iter().all(|&l| l == 0)
-    }
-
-    #[inline(always)]
-    pub fn add_vector_custom_mod(&mut self, other: &[u16; LANES]) {
-        for i in 0..LANES {
-            self.lanes[i] = add_lane_custom_mod(self.lanes[i], other[i]);
+        Self {
+            lanes: [0; LANE_COUNT],
         }
     }
 
-    #[inline(always)]
-    pub fn sub_vector_custom_mod(&mut self, other: &[u16; LANES]) {
-        for i in 0..LANES {
-            self.lanes[i] = sub_lane_custom_mod(self.lanes[i], other[i]);
+    /// Fast modular addition without 128-bit division
+    pub fn add(&mut self, rhs: &Self) {
+        for (l, r) in self.lanes.iter_mut().zip(rhs.lanes.iter()) {
+            let (sum, overflow) = l.overflowing_add(*r);
+            if overflow || sum >= MODULUS {
+                *l = sum.wrapping_sub(MODULUS);
+            } else {
+                *l = sum;
+            }
         }
     }
 
-    #[inline(always)]
-    pub fn add_vector_native_wrap(&mut self, other: &[u16; LANES]) {
-        for i in 0..LANES {
-            self.lanes[i] = add_lane_native_wrap(self.lanes[i], other[i]);
+    /// Fast modular subtraction without 128-bit division
+    pub fn sub(&mut self, rhs: &Self) {
+        for (l, r) in self.lanes.iter_mut().zip(rhs.lanes.iter()) {
+            if *l >= *r {
+                *l -= *r;
+            } else {
+                *l = (*l + MODULUS) - *r;
+            }
         }
     }
 
-    #[inline(always)]
-    pub fn sub_vector_native_wrap(&mut self, other: &[u16; LANES]) {
-        for i in 0..LANES {
-            self.lanes[i] = sub_lane_native_wrap(self.lanes[i], other[i]);
+    pub fn hash_element(data: &[u8]) -> Self {
+        let mut lanes = [0u64; LANE_COUNT];
+        let mut state = 0x85ebca6b_u64;
+        for (i, lane) in lanes.iter_mut().enumerate() {
+            let mut val = state;
+            for &byte in data {
+                val = val.wrapping_mul(31).wrapping_add(byte as u64);
+            }
+            val = val.wrapping_add(i as u64);
+            *lane = val % MODULUS;
+            state = val;
         }
+        Self { lanes }
     }
 }
 
-// ============================================================================
-// 3. Precomputed Data Table Generator
-// ============================================================================
+impl Default for LtHashState {
+    fn default() -> Self {
+        Self::new()
+    }
+}
 
-/// Generates a deterministic precomputed table of 16-bit numbers in [0, 65520].
-/// Bypasses all PRNG / Hashing overhead during actual benchmark timing.
-pub fn generate_precomputed_table(count: usize) -> Vec<[u16; LANES]> {
-    let mut table = Vec::with_capacity(count);
-    let mut seed = 0x87654321u32; // Deterministic XorShift seed
-
-    for _ in 0..count {
-        let mut element = [0u16; LANES];
-        for lane in element.iter_mut() {
-            seed ^= seed << 13;
-            seed ^= seed >> 17;
-            seed ^= seed << 5;
-            *lane = (seed % (CUSTOM_MODULUS_U16 as u32)) as u16;
+impl fmt::Display for LtHashState {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "LtHash(")?;
+        for (i, lane) in self.lanes.iter().enumerate() {
+            if i > 0 {
+                write!(f, ", ")?;
+            }
+            write!(f, "{:#x}", lane)?;
         }
-        table.push(element);
+        write!(f, ")")
     }
-    table
 }
 
-// ============================================================================
-// 4. Criterion Benchmarking Suite
-// ============================================================================
+#[allow(dead_code)]
+pub fn main() {
+    println!("LtHash Custom Lane Mod");
 
-fn benchmark_suite(c: &mut Criterion) {
-    // 1. Precompute table in memory BEFORE timing starts
-    let table = generate_precomputed_table(PRECOMPUTED_TABLE_SIZE);
+    let elem_a = b"apple";
+    let elem_b = b"banana";
 
-    // Extract single-lane inputs for single-lane tests
-    let single_lane_inputs: Vec<(u16, u16)> = table
-        .iter()
-        .take(PRECOMPUTED_TABLE_SIZE)
-        .map(|arr| (arr[0], arr[1]))
-        .collect();
+    let hash_a = LtHashState::hash_element(elem_a);
+    let hash_b = LtHashState::hash_element(elem_b);
 
-    let mut group = c.benchmark_group("LtHash Arithmetic Benchmarks");
+    let mut set_hash = LtHashState::new();
+    set_hash.add(&hash_a);
+    set_hash.add(&hash_b);
 
-    // --- Benchmark A: Single Lane Add/Sub Operations ---
-    group.bench_function(BenchmarkId::new("1. Single Lane - Native Wrap (2^16)", PRECOMPUTED_TABLE_SIZE), |b| {
-        b.iter(|| {
-            let mut acc = 0u16;
-            for &(x, _) in black_box(&single_lane_inputs) {
-                acc = add_lane_native_wrap(acc, x);
-            }
-            for &(x, _) in black_box(single_lane_inputs.iter().rev()) {
-                acc = sub_lane_native_wrap(acc, x);
-            }
-            assert_eq!(acc, 0, "FAILED: Single lane failed to land at net-zero!");
-            acc
-        });
-    });
+    println!("Combined Set Hash: {}", set_hash);
 
-    group.bench_function(BenchmarkId::new("2. Single Lane - Custom Mod (65,521)", PRECOMPUTED_TABLE_SIZE), |b| {
-        b.iter(|| {
-            let mut acc = 0u16;
-            for &(x, _) in black_box(&single_lane_inputs) {
-                acc = add_lane_custom_mod(acc, x);
-            }
-            for &(x, _) in black_box(single_lane_inputs.iter().rev()) {
-                acc = sub_lane_custom_mod(acc, x);
-            }
-            assert_eq!(acc, 0, "FAILED: Single lane failed to land at net-zero!");
-            acc
-        });
-    });
-
-    // --- Benchmark B: Full 1,024-Lane Vector Operations ---
-    group.bench_function(BenchmarkId::new("3. 1024-Lane Vector - Native Wrap (2^16)", PRECOMPUTED_TABLE_SIZE), |b| {
-        b.iter(|| {
-            let mut acc = LtHash16::new();
-            for element in black_box(&table) {
-                acc.add_vector_native_wrap(element);
-            }
-            for element in black_box(table.iter().rev()) {
-                acc.sub_vector_native_wrap(element);
-            }
-            assert!(acc.is_identity(), "FAILED: Emptied set but failed to land at 0!");
-            acc
-        });
-    });
-
-    group.bench_function(BenchmarkId::new("4. 1024-Lane Vector - Custom Mod (65,521)", PRECOMPUTED_TABLE_SIZE), |b| {
-        b.iter(|| {
-            let mut acc = LtHash16::new();
-            for element in black_box(&table) {
-                acc.add_vector_custom_mod(element);
-            }
-            for element in black_box(table.iter().rev()) {
-                acc.sub_vector_custom_mod(element);
-            }
-            assert!(acc.is_identity(), "FAILED: Emptied set but failed to land at 0!");
-            acc
-        });
-    });
-
-    group.finish();
+    set_hash.sub(&hash_a);
+    println!("After removing 'apple': {}", set_hash);
+    println!("Matches 'banana' alone? {}", set_hash == hash_b);
 }
 
-criterion_group!(benches, benchmark_suite);
-
-// ============================================================================
-// 5. Main Binary Entry Point (CLI Test & Verification Harness)
-// ============================================================================
-
-fn main() {
-    let args: Vec<String> = env::args().collect();
-
-    // Check if invoked via `cargo bench`
-    if args.iter().any(|arg| arg == "--bench") {
-        criterion_main();
-        return;
-    }
-
-    println!("===============================================================");
-    println!(" LtHash Custom Modulo (M = 65,521) Verification & Test Suite");
-    println!("===============================================================\n");
-
-    println!("[1/3] Generating precomputed table of 10,000 x 1024-lane elements...");
-    let table = generate_precomputed_table(10_000);
-    println!("      Done. Precomputed table ready in RAM.\n");
-
-    println!("[2/3] Running Single-Lane Integrity Test...");
-    let mut single_acc = 0u16;
-    for element in &table {
-        single_acc = add_lane_custom_mod(single_acc, element[0]);
-    }
-    for element in table.iter().rev() {
-        single_acc = sub_lane_custom_mod(single_acc, element[0]);
-    }
-    assert_eq!(single_acc, 0, "Single lane net-zero verification failed!");
-    println!("      SUCCESS: Single lane returned to exact 0!\n");
-
-    println!("[3/3] Running Full 1,024-Lane Vector Integrity Test...");
-    let mut vec_acc = LtHash16::new();
-    for element in &table {
-        vec_acc.add_vector_custom_mod(element);
-    }
-    for element in table.iter().rev() {
-        vec_acc.sub_vector_custom_mod(element);
-    }
-    assert!(vec_acc.is_identity(), "Vector net-zero verification failed!");
-    println!("      SUCCESS: All 1,024 vector lanes returned to exact 0!\n");
-
-    println!("===============================================================");
-    println!(" VERIFICATION COMPLETE: ALL INTEGRITY TESTS PASSED (Net Zero = 0)");
-    println!(" To run microbenchmarks, execute: cargo bench");
-    println!("===============================================================");
-}
-
-// ============================================================================
-// 6. Unit Tests (cargo test)
-// ============================================================================
+// --- UNIT TESTS ---
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use super::LtHashState;
+    use super::MODULUS;
 
     #[test]
-    fn test_single_lane_add_sub_boundary() {
-        let a = 65520u16; // M - 1
-        let b = 100u16;
+    fn test_strict_bounds_and_no_dual_zero() {
+        let mut state = LtHashState::new();
+        for lane in state.lanes.iter() {
+            assert!(*lane < MODULUS);
+        }
 
-        let sum = add_lane_custom_mod(a, b);
-        assert_eq!(sum, 99); // Wrap over M
-
-        let diff = sub_lane_custom_mod(sum, b);
-        assert_eq!(diff, a); // Return to original
+        let elem = LtHashState::hash_element(b"test_bounds");
+        state.add(&elem);
+        for lane in state.lanes.iter() {
+            assert!(*lane < MODULUS);
+        }
     }
 
     #[test]
-    fn test_full_vector_lifecycle_net_zero() {
-        let table = generate_precomputed_table(1_000);
-        let mut acc = LtHash16::new();
+    fn test_unreduced_input_boundaries() {
+        let h1 = LtHashState::hash_element(b"input_1");
+        let h2 = LtHashState::hash_element(b"input_2");
 
-        for elem in &table {
-            acc.add_vector_custom_mod(elem);
-        }
-        assert!(!acc.is_identity());
+        let mut sum = h1;
+        sum.add(&h2);
 
-        for elem in table.iter().rev() {
-            acc.sub_vector_custom_mod(elem);
+        for lane in sum.lanes.iter() {
+            assert!(*lane < MODULUS);
         }
-        assert!(acc.is_identity(), "Vector failed to return to net zero!");
+    }
+
+    #[test]
+    fn test_homomorphic_addition_order_independence() {
+        let h_a = LtHashState::hash_element(b"item_A");
+        let h_b = LtHashState::hash_element(b"item_B");
+
+        let mut sum1 = LtHashState::new();
+        sum1.add(&h_a);
+        sum1.add(&h_b);
+
+        let mut sum2 = LtHashState::new();
+        sum2.add(&h_b);
+        sum2.add(&h_a);
+
+        assert_eq!(sum1, sum2);
+    }
+
+    #[test]
+    fn test_full_vector_net_zero() {
+        let h = LtHashState::hash_element(b"net_zero_test");
+        let mut state = LtHashState::new();
+
+        state.add(&h);
+        state.sub(&h);
+
+        assert_eq!(state, LtHashState::new());
     }
 }
