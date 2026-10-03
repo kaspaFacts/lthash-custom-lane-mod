@@ -7,5 +7,6 @@ edition = "2021"
 criterion = { version = "0.5", features = ["html_reports"] }
 
 [[bench]]
-name = "main"
+name = "benchmarks"
+path = "benches/benchmarks.rs"
 harness = false
