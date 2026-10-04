@@ -8,7 +8,7 @@ The implementation operates strictly on native `u16` types without upcasting to 
 
 ## Why
 
-A recent paper, ["Two-Bit Lifting for Ternary SIS: Polynomial-Time Collision Attacks on LtHash"](https://eprint.iacr.org/2026/2083), shows that the original power-of-two modulus (2^{16}) enables recursive linear algebra attacks that break LtHash's collision resistance. The authors recommend replacing power-of-two moduli with prime fields to restore the underlying Short Integer Solution (SIS) lattice hardness assumptions.
+A recent paper, ["Two-Bit Lifting for Ternary SIS: Polynomial-Time Collision Attacks on LtHash"](https://eprint.iacr.org/2026/2083), shows that the original power-of-two modulus ($2^{16}$) enables recursive linear algebra attacks that break LtHash's collision resistance. The authors recommend replacing power-of-two moduli with prime fields to restore the underlying Short Integer Solution (SIS) lattice hardness assumptions.
 
 This repository provides a reference implementation and benchmark showing that switching to the largest 16-bit Solinas prime ($p = 2^{16} - 15 = 65,521$)—which restores the paper's recommended security properties—can be implemented efficiently, running at near-native speed compared to Rust's standard wrapping primitives.
 
