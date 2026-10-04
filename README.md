@@ -4,7 +4,7 @@
 
 This repository isolates, tests, and benchmarks custom modular arithmetic for **LtHash** (Lattice-based Homomorphic Hash). It evaluates **1,024-lane 16-bit vector operations** under a custom prime modulus (M = 65,521, where M = 2^16 - 15) against native CPU hardware-wrapping arithmetic (`u16::wrapping_add` / `u16::wrapping_sub`).
 
-The implementation operates strictly on native `u16` types without upcasting to 32-bit/64-bit integers, providing a drop-in reference for homomorphic set hashing in high-throughput systems (such as **Rusty Kaspa** node consensus, UTXO set commitments, and mempool synchronization).
+The implementation operates strictly on native `u16` types without upcasting to 32-bit/64-bit integers, providing drop-in modular alternatives to u16::wrapping_add and u16::wrapping_sub, allowing callers to replace 2¹⁶ wrapping arithmetic with arithmetic modulo a custom 16-bit modulus.
 
 ---
 
