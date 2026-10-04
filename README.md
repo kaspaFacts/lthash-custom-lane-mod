@@ -1,7 +1,5 @@
 # LtHash Custom Modulo Benchmarking Suite (M = 2^16 - 15)
 
-> **Disclaimer:** This project and its performance optimizations were developed with assistance from AI (LLM collaboration) for code generation, benchmark structuring, and algebraic verification.
-
 This repository isolates, tests, and benchmarks custom modular arithmetic for **LtHash** (Lattice-based Homomorphic Hash). It evaluates **1,024-lane 16-bit vector operations** under a custom prime modulus (M = 65,521, where M = 2^16 - 15) against native CPU hardware-wrapping arithmetic (`u16::wrapping_add` / `u16::wrapping_sub`).
 
 The implementation operates strictly on native `u16` types without upcasting to 32-bit/64-bit integers, providing drop-in modular alternatives to u16::wrapping_add and u16::wrapping_sub, allowing callers to replace 2¹⁶ wrapping arithmetic with arithmetic modulo a custom 16-bit modulus.
@@ -38,16 +36,20 @@ lthash-custom-mod/
 
 ## Unit Testing & Algebraic Integrity
 
-The test suite verifies core mathematical properties required for homomorphic hashing:
-- **Strict Bounds:** Ensures all output lanes satisfy 0 <= lane < 65,521.
-- **Boundary Overflow/Underflow:** Correctly handles 16-bit hardware integer wrap-around before modular reduction.
-- **Homomorphic Order Independence:** Verifies commutativity (A + B == B + A).
-- **Net-Zero Inverse Property:** Verifies (A + B) - B == A and multi-item set removals return to zero.
+The current test suite covers the core modular arithmetic properties and important boundary conditions. **Additional tests are still required** before this implementation should be considered fully validated for production use or integration with a real LtHash implementation.
+
+The current test suite verifies:
+
+- **Strict Bounds:** Ensures all output lanes satisfy `0 <= lane < 65,521`.
+- **Boundary Overflow/Underflow:** Tests 16-bit arithmetic wrap-around and modular subtraction underflow.
+- **Homomorphic Order Independence:** Verifies commutativity (`A + B == B + A`).
+- **Net-Zero Inverse Property:** Verifies adding and then removing the same element returns the accumulator to zero.
 
 To run the unit test suite:
 
 ```powershell
 cargo test
+
 ```
 ---
 
