@@ -25,7 +25,7 @@ Benchmarks measured on 1,024-lane `[u16; 1024]` vectors via **Criterion.rs**:
 ---
 
 ## Repository Layout
-
+```
 lthash-custom-mod/
 ├── Cargo.toml
 ├── README.md
@@ -33,7 +33,7 @@ lthash-custom-mod/
 │   └── benchmarks.rs   # Criterion benchmark definitions (1,024-lane u16 comparisons)
 └── src/
     └── main.rs         # Core LtHashState ([u16; 1024]), custom mod arithmetic, and test suite
-
+```
 ---
 
 ## 1. Unit Testing & Algebraic Integrity
