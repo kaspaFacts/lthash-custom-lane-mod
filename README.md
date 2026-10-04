@@ -78,7 +78,7 @@ RUSTFLAGS="-C target-cpu=native" cargo bench
 
 ---
 
-## 3. Results Inspection
+## Results Inspection
 
 After running `cargo bench`, open the interactive Criterion HTML performance report in your browser:
 
