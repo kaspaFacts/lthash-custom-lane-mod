@@ -40,9 +40,37 @@ lthash-custom-mod/
 ```
 ---
 
-## Unit Testing & Algebraic Integrity
-
-The current test suite covers the core modular arithmetic properties and important boundary conditions. **Additional tests are still required** before this implementation should be considered fully validated for production use or integration with a real LtHash implementation.
+### Known Limitations & Test Gaps  
+  
+**Precondition: inputs must be fully reduced.**  
+`LtHashState::add` and `LtHashState::sub` are only correct when every input lane  
+is already in `[0, MODULUS_16 - 1]`. This invariant is currently guaranteed only  
+because `hash_element` reduces each lane with `% MODULUS_16`.  
+  
+- `add` performs at most one conditional subtraction of `MODULUS_16`. If an input  
+  lane is ≥ 65,521 (unreduced), the result can remain out of bounds  
+  (e.g. `a + b` near `u16::MAX` wraps and a single reduction is insufficient).  
+- `sub` similarly assumes `b < MODULUS_16`; an unreduced `b` yields an incorrect  
+  residue.  
+- Callers constructing `LtHashState` manually (i.e., writing `lanes` directly)  
+  must reduce inputs themselves — the API does not enforce this.  
+  
+**Current test suite gaps:**  
+  
+- `test_unreduced_input_boundaries` is mislabeled — it uses `MODULUS_16 - 1`,  
+  which is a fully *reduced* value, so the unreduced-input failure above is  
+  never exercised.  
+- Missing edge cases worth adding:  
+  - `(M - 1) + 1 == 0` — result landing exactly on zero after reduction  
+  - `sum == MODULUS_16` exactly — the `>= MODULUS_16` boundary in `add`  
+  - `a == b` in `sub` → `0`  
+  - `state.sub(&state)` → all-zero state  
+  - Additive identity: `state.add(&LtHashState::new())` is a no-op  
+  - Associativity: `(a + b) + c == a + (b + c)`  
+- No exhaustive or property-based testing. Since lanes are `u16`, an exhaustive  
+  sweep of all `u16 × u16` input pairs against a `u32`-upcasted reference  
+  (`(a as u32 + b as u32) % MODULUS_16 as u32`) is feasible and would fully  
+  verify `add`/`sub` over the reduced domain.
 
 The current test suite verifies:
 
