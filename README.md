@@ -46,7 +46,7 @@ The test suite verifies core mathematical properties required for homomorphic ha
 
 To run the unit test suite:
 
-```
+```powershell
 cargo test
 ```
 ---
@@ -55,18 +55,18 @@ cargo test
 
 To execute the Criterion microbenchmarks using standard target settings:
 
-```
+```powershell
 cargo bench
 ```
 To run benchmarks with maximum native SIMD vectorization (e.g., AVX2 / AVX-512 register packing):
 
 # Windows (PowerShell):
-```
+```powershell
 $env:RUSTFLAGS="-C target-cpu=native"; cargo bench
 ```
 
 # Linux / macOS (Bash/Zsh):
-```
+```bash
 RUSTFLAGS="-C target-cpu=native" cargo bench
 ```
 
@@ -88,11 +88,11 @@ Start-Process target/criterion/report/index.html
 ```
 
 # macOS:
-```
+```bash
 open target/criterion/report/index.html
 ```
 
 # Linux:
-```
+```bash
 xdg-open target/criterion/report/index.html
 ```
