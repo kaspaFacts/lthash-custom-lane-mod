@@ -83,7 +83,7 @@ RUSTFLAGS="-C target-cpu=native" cargo bench
 After running `cargo bench`, open the interactive Criterion HTML performance report in your browser:
 
 # Windows (PowerShell):
-```
+```powershell
 Start-Process target/criterion/report/index.html
 ```
 
