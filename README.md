@@ -40,20 +40,14 @@ lthash-custom-mod/
 ```
 ---
 
-### Known Limitations & Test Gaps  
+### Known Limitations & Test Gaps
+
+**Precondition: inputs must be fully reduced.**
+`LtHashState::add` and `LtHashState::sub` are only correct when every input lane is already in `[0, MODULUS_16 - 1]`. This invariant is currently guaranteed only because `hash_element` reduces each lane with `% MODULUS_16`.
   
-**Precondition: inputs must be fully reduced.**  
-`LtHashState::add` and `LtHashState::sub` are only correct when every input lane  
-is already in `[0, MODULUS_16 - 1]`. This invariant is currently guaranteed only  
-because `hash_element` reduces each lane with `% MODULUS_16`.  
-  
-- `add` performs at most one conditional subtraction of `MODULUS_16`. If an input  
-  lane is ≥ 65,521 (unreduced), the result can remain out of bounds  
-  (e.g. `a + b` near `u16::MAX` wraps and a single reduction is insufficient).  
-- `sub` similarly assumes `b < MODULUS_16`; an unreduced `b` yields an incorrect  
-  residue.  
-- Callers constructing `LtHashState` manually (i.e., writing `lanes` directly)  
-  must reduce inputs themselves — the API does not enforce this.  
+- `add` performs at most one conditional subtraction of `MODULUS_16`. If an input lane is ≥ 65,521 (unreduced), the result can remain out of bounds (e.g. `a + b` near `u16::MAX` wraps and a single reduction is insufficient).
+- `sub` similarly assumes `b < MODULUS_16`; an unreduced `b` yields an incorrect residue.  
+- Callers constructing `LtHashState` manually (i.e., writing `lanes` directly) must reduce inputs themselves — the API does not enforce this.  
   
 **Current test suite gaps:**  
   
