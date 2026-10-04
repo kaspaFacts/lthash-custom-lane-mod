@@ -46,23 +46,29 @@ The test suite verifies core mathematical properties required for homomorphic ha
 
 To run the unit test suite:
 
+```
 cargo test
-
+```
 ---
 
 ## 2. Running Microbenchmarks
 
 To execute the Criterion microbenchmarks using standard target settings:
 
+```
 cargo bench
-
+```
 To run benchmarks with maximum native SIMD vectorization (e.g., AVX2 / AVX-512 register packing):
 
 # Windows (PowerShell):
+```
 $env:RUSTFLAGS="-C target-cpu=native"; cargo bench
+```
 
 # Linux / macOS (Bash/Zsh):
+```
 RUSTFLAGS="-C target-cpu=native" cargo bench
+```
 
 ### What the Benchmarks Measure:
 
@@ -77,10 +83,16 @@ RUSTFLAGS="-C target-cpu=native" cargo bench
 After running `cargo bench`, open the interactive Criterion HTML performance report in your browser:
 
 # Windows (PowerShell):
+```
 Start-Process target/criterion/report/index.html
+```
 
 # macOS:
+```
 open target/criterion/report/index.html
+```
 
 # Linux:
+```
 xdg-open target/criterion/report/index.html
+```
