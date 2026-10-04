@@ -36,7 +36,7 @@ lthash-custom-mod/
 ```
 ---
 
-## 1. Unit Testing & Algebraic Integrity
+## Unit Testing & Algebraic Integrity
 
 The test suite verifies core mathematical properties required for homomorphic hashing:
 - **Strict Bounds:** Ensures all output lanes satisfy 0 <= lane < 65,521.
@@ -51,7 +51,7 @@ cargo test
 ```
 ---
 
-## 2. Running Microbenchmarks
+## Running Microbenchmarks
 
 To execute the Criterion microbenchmarks using standard target settings:
 
