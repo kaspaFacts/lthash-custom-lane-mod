@@ -1,54 +1,54 @@
-use std::fmt;
-
-pub const LANE_COUNT: usize = 16;
-pub const MODULUS: u64 = 0xFFFF_FFFF_FFFF_0001; // 64-bit prime/modulus
+pub const LANES: usize = 1024;
+pub const LANE_COUNT: usize = LANES;
+pub const MODULUS_16: u16 = 65_521; // M = 2^16 - 15
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct LtHashState {
-    pub lanes: [u64; LANE_COUNT],
+    pub lanes: [u16; LANES],
 }
 
 impl LtHashState {
+    /// Creates a new identity state (all lanes set to zero).
     pub fn new() -> Self {
-        Self {
-            lanes: [0; LANE_COUNT],
-        }
+        Self { lanes: [0u16; LANES] }
     }
 
-    /// Fast modular addition without 128-bit division
-    pub fn add(&mut self, rhs: &Self) {
-        for (l, r) in self.lanes.iter_mut().zip(rhs.lanes.iter()) {
-            let (sum, overflow) = l.overflowing_add(*r);
-            if overflow || sum >= MODULUS {
-                *l = sum.wrapping_sub(MODULUS);
+    /// Adds another state in-place: (a + b) mod (2^16 - 15)
+    /// Operates strictly on u16 without upcasting.
+    #[inline(always)]
+    pub fn add(&mut self, other: &Self) {
+        for (a, &b) in self.lanes.iter_mut().zip(other.lanes.iter()) {
+            let (sum, overflow) = a.overflowing_add(b);
+            *a = if overflow || sum >= MODULUS_16 {
+                sum.wrapping_sub(MODULUS_16)
             } else {
-                *l = sum;
-            }
+                sum
+            };
         }
     }
 
-    /// Fast modular subtraction without 128-bit division
-    pub fn sub(&mut self, rhs: &Self) {
-        for (l, r) in self.lanes.iter_mut().zip(rhs.lanes.iter()) {
-            if *l >= *r {
-                *l -= *r;
+    /// Subtracts another state in-place: (a - b) mod (2^16 - 15)
+    /// Operates strictly on u16 without upcasting.
+    #[inline(always)]
+    pub fn sub(&mut self, other: &Self) {
+        for (a, &b) in self.lanes.iter_mut().zip(other.lanes.iter()) {
+            *a = if *a >= b {
+                *a - b
             } else {
-                *l = (*l + MODULUS) - *r;
-            }
+                a.wrapping_add(MODULUS_16) - b
+            };
         }
     }
 
+    /// Dummy hash expansion generating 1024 u16 lanes for benchmark/test harness.
     pub fn hash_element(data: &[u8]) -> Self {
-        let mut lanes = [0u64; LANE_COUNT];
-        let mut state = 0x85ebca6b_u64;
+        let mut lanes = [0u16; LANES];
         for (i, lane) in lanes.iter_mut().enumerate() {
-            let mut val = state;
+            let mut acc: u16 = (i as u16).wrapping_mul(31);
             for &byte in data {
-                val = val.wrapping_mul(31).wrapping_add(byte as u64);
+                acc = acc.wrapping_mul(37).wrapping_add(byte as u16);
             }
-            val = val.wrapping_add(i as u64);
-            *lane = val % MODULUS;
-            state = val;
+            *lane = acc % MODULUS_16;
         }
         Self { lanes }
     }
@@ -60,84 +60,68 @@ impl Default for LtHashState {
     }
 }
 
-impl fmt::Display for LtHashState {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "LtHash(")?;
-        for (i, lane) in self.lanes.iter().enumerate() {
-            if i > 0 {
-                write!(f, ", ")?;
-            }
-            write!(f, "{:#x}", lane)?;
-        }
-        write!(f, ")")
-    }
+fn main() {
+    println!("LtHash 1,024-lane u16 benchmarking suite (M = 65,521)");
+    let mut state = LtHashState::new();
+    let elem = LtHashState::hash_element(b"kaspa_utxo_test_payload");
+    state.add(&elem);
+    println!("First lane sample: {}", state.lanes[0]);
+    state.sub(&elem);
+    println!("After subtraction (net zero check): {}", state.lanes[0]);
 }
-
-#[allow(dead_code)]
-pub fn main() {
-    println!("LtHash Custom Lane Mod");
-
-    let elem_a = b"apple";
-    let elem_b = b"banana";
-
-    let hash_a = LtHashState::hash_element(elem_a);
-    let hash_b = LtHashState::hash_element(elem_b);
-
-    let mut set_hash = LtHashState::new();
-    set_hash.add(&hash_a);
-    set_hash.add(&hash_b);
-
-    println!("Combined Set Hash: {}", set_hash);
-
-    set_hash.sub(&hash_a);
-    println!("After removing 'apple': {}", set_hash);
-    println!("Matches 'banana' alone? {}", set_hash == hash_b);
-}
-
-// --- UNIT TESTS ---
 
 #[cfg(test)]
 mod tests {
-    use super::LtHashState;
-    use super::MODULUS;
-
     #[test]
     fn test_strict_bounds_and_no_dual_zero() {
-        let mut state = LtHashState::new();
-        for lane in state.lanes.iter() {
-            assert!(*lane < MODULUS);
+        let mut state = crate::LtHashState::new();
+        for &lane in state.lanes.iter() {
+            assert!(lane < crate::MODULUS_16);
         }
 
-        let elem = LtHashState::hash_element(b"test_bounds");
+        let elem = crate::LtHashState::hash_element(b"test_bounds");
         state.add(&elem);
-        for lane in state.lanes.iter() {
-            assert!(*lane < MODULUS);
+        for &lane in state.lanes.iter() {
+            assert!(lane < crate::MODULUS_16);
         }
     }
 
     #[test]
     fn test_unreduced_input_boundaries() {
-        let h1 = LtHashState::hash_element(b"input_1");
-        let h2 = LtHashState::hash_element(b"input_2");
+        let mut a = crate::LtHashState::new();
+        let mut b = crate::LtHashState::new();
 
-        let mut sum = h1;
-        sum.add(&h2);
+        a.lanes[0] = crate::MODULUS_16 - 1; // 65,520
+        b.lanes[0] = crate::MODULUS_16 - 1; // 65,520
 
-        for lane in sum.lanes.iter() {
-            assert!(*lane < MODULUS);
-        }
+        a.add(&b);
+        assert_eq!(a.lanes[0], crate::MODULUS_16 - 2);
+        assert!(a.lanes[0] < crate::MODULUS_16);
+    }
+
+    #[test]
+    fn test_subtraction_underflow_wrap() {
+        let mut a = crate::LtHashState::new();
+        let mut b = crate::LtHashState::new();
+
+        a.lanes[0] = 5;
+        b.lanes[0] = 10;
+
+        a.sub(&b);
+        assert_eq!(a.lanes[0], crate::MODULUS_16 - 5);
+        assert!(a.lanes[0] < crate::MODULUS_16);
     }
 
     #[test]
     fn test_homomorphic_addition_order_independence() {
-        let h_a = LtHashState::hash_element(b"item_A");
-        let h_b = LtHashState::hash_element(b"item_B");
+        let h_a = crate::LtHashState::hash_element(b"item_A");
+        let h_b = crate::LtHashState::hash_element(b"item_B");
 
-        let mut sum1 = LtHashState::new();
+        let mut sum1 = crate::LtHashState::new();
         sum1.add(&h_a);
         sum1.add(&h_b);
 
-        let mut sum2 = LtHashState::new();
+        let mut sum2 = crate::LtHashState::new();
         sum2.add(&h_b);
         sum2.add(&h_a);
 
@@ -146,12 +130,12 @@ mod tests {
 
     #[test]
     fn test_full_vector_net_zero() {
-        let h = LtHashState::hash_element(b"net_zero_test");
-        let mut state = LtHashState::new();
+        let h = crate::LtHashState::hash_element(b"net_zero_test");
+        let mut state = crate::LtHashState::new();
 
         state.add(&h);
         state.sub(&h);
 
-        assert_eq!(state, LtHashState::new());
+        assert_eq!(state, crate::LtHashState::new());
     }
 }
