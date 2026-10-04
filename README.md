@@ -12,15 +12,19 @@ The implementation operates strictly on native `u16` types without upcasting to 
 
 Benchmarks measured on 1,024-lane `[u16; 1024]` vectors via **Criterion.rs**:
 
-| Operation | Mean Time | Overhead vs. Hardware | Status |
-| :--- | :--- | :--- | :--- |
-| **wrapping_add_u16** | ~834.96 ns | Baseline | Standard 16-bit vector addition (2^16 wrap) |
-| **custom_mod_add_u16** | ~905.88 ns | +70.92 ns (~8.5%) | Modular overflow check (mod 65,521) without division |
-| **wrapping_sub_u16** | ~833.99 ns | Baseline | Standard 16-bit vector subtraction (2^16 wrap) |
-| **custom_mod_sub_u16** | ~894.42 ns | +60.43 ns (~7.2%) | **~93% theoretical hardware speed** (mod 65,521) |
-| **hash_element_40bytes** | ~39.11 µs | — | 40-byte input to 1,024-lane `u16` expansion harness |
-
-> **Key Takeaway:** Performing custom prime field reduction (mod 65,521) across 1,024 `u16` lanes adds only **~60–70 nanoseconds total** over raw hardware addition—costing **less than 0.07 ns per lane**.
+| Operation | Overhead vs. Hardware Baseline | Description |  
+| :--- | :--- | :--- |  
+| **wrapping_add_u16** | — (baseline) | Standard 16-bit vector addition (2^16 wrap) |  
+| **custom_mod_add_u16** | Single-digit % overhead | Modular reduction (mod 65,521) without division |  
+| **wrapping_sub_u16** | — (baseline) | Standard 16-bit vector subtraction (2^16 wrap) |  
+| **custom_mod_sub_u16** | Single-digit % overhead | Modular subtraction (mod 65,521) without division |  
+| **hash_element_40bytes** | — | 40-byte input to 1,024-lane `u16` expansion harness |  
+  
+> **Key Takeaway:** On a typical x86-64 build (`cargo bench`, default codegen), custom prime  
+> field reduction (mod 65,521) across 1,024 `u16` lanes costs only ~7–9% more than raw  
+> wrapping arithmetic — a few tens of nanoseconds total on the benchmark machine.  
+> Exact figures depend on CPU, compiler version, and `RUSTFLAGS`; run `cargo bench`  
+> to measure on your hardware.
 
 ---
 
