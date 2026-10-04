@@ -30,9 +30,9 @@ lthash-custom-mod/
 ├── Cargo.toml
 ├── README.md
 ├── benches/
-│   └── benchmarks.rs   # Criterion benchmark definitions (1,024-lane u16 comparisons)
+│   └── benchmarks.rs    # Criterion benchmark definitions (1,024-lane u16 comparisons)
 └── src/
-    └── main.rs         # Core LtHashState ([u16; 1024]), custom mod arithmetic, and test suite
+└── main.rs         # Core LtHashState ([u16; 1024]), custom mod arithmetic, and test suite
 ```
 ---
 
