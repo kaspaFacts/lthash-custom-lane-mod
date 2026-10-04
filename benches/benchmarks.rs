@@ -5,13 +5,15 @@ mod main_mod;
 
 use main_mod::{LtHashState, LANE_COUNT};
 
-fn baseline_wrapping_add(a: &mut [u64; LANE_COUNT], b: &[u64; LANE_COUNT]) {
+/// Hardware baseline: raw 16-bit wrapping addition without modular reduction
+fn baseline_wrapping_add(a: &mut [u16; LANE_COUNT], b: &[u16; LANE_COUNT]) {
     for (l, r) in a.iter_mut().zip(b.iter()) {
         *l = l.wrapping_add(*r);
     }
 }
 
-fn baseline_wrapping_sub(a: &mut [u64; LANE_COUNT], b: &[u64; LANE_COUNT]) {
+/// Hardware baseline: raw 16-bit wrapping subtraction without modular reduction
+fn baseline_wrapping_sub(a: &mut [u16; LANE_COUNT], b: &[u16; LANE_COUNT]) {
     for (l, r) in a.iter_mut().zip(b.iter()) {
         *l = l.wrapping_sub(*r);
     }
@@ -23,7 +25,7 @@ fn bench_addition_comparison(c: &mut Criterion) {
 
     let mut group = c.benchmark_group("Addition_Comparison");
 
-    group.bench_function("wrapping_add", |b| {
+    group.bench_function("wrapping_add_u16", |b| {
         b.iter(|| {
             let mut lanes = black_box(elem_a.lanes);
             baseline_wrapping_add(&mut lanes, black_box(&elem_b.lanes));
@@ -31,7 +33,7 @@ fn bench_addition_comparison(c: &mut Criterion) {
         })
     });
 
-    group.bench_function("custom_mod_add", |b| {
+    group.bench_function("custom_mod_add_u16", |b| {
         b.iter(|| {
             let mut state = black_box(elem_a);
             state.add(black_box(&elem_b));
@@ -48,7 +50,7 @@ fn bench_subtraction_comparison(c: &mut Criterion) {
 
     let mut group = c.benchmark_group("Subtraction_Comparison");
 
-    group.bench_function("wrapping_sub", |b| {
+    group.bench_function("wrapping_sub_u16", |b| {
         b.iter(|| {
             let mut lanes = black_box(elem_a.lanes);
             baseline_wrapping_sub(&mut lanes, black_box(&elem_b.lanes));
@@ -56,7 +58,7 @@ fn bench_subtraction_comparison(c: &mut Criterion) {
         })
     });
 
-    group.bench_function("custom_mod_sub", |b| {
+    group.bench_function("custom_mod_sub_u16", |b| {
         b.iter(|| {
             let mut state = black_box(elem_a);
             state.sub(black_box(&elem_b));
