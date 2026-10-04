@@ -25,7 +25,7 @@ Benchmarks measured on 1,024-lane `[u16; 1024]` vectors via **Criterion.rs**:
 ---
 
 ## Repository Layout
-```
+```text
 lthash-custom-mod/
 ├── Cargo.toml
 ├── README.md
