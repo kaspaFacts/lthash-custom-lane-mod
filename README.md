@@ -1,6 +1,6 @@
 # LtHash Custom Modulo Benchmarking Suite (M = 2^16 - 15)
 
-INCOMPLETE: Publishing as public for sharing ONLY, testing is NOT complete and exhaustive.
+INCOMPLETE: Publishing as public for sharing ONLY, testing is NOT complete or exhaustive.
 
 This repository isolates, tests, and benchmarks custom modular arithmetic for **LtHash** (Lattice-based Homomorphic Hash). It evaluates **1,024-lane 16-bit vector operations** under a custom prime modulus (M = 65,521, where M = 2^16 - 15) against native CPU hardware-wrapping arithmetic (`u16::wrapping_add` / `u16::wrapping_sub`).
 
